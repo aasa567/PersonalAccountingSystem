@@ -14,7 +14,7 @@ namespace AccountingApi.Models
 
         [Column(TypeName = "decimal(18, 2)")] // 設定金錢格式
         public decimal Amount { get; set; } // 金額
-        public string Category { get; set; } = "其他"; 
+        public string Category { get; set; } = "食"; 
         public DateTime Date { get; set; } = DateTime.Now; // 日期
 
         public string? Note { get; set; } // 備註 (可為空)

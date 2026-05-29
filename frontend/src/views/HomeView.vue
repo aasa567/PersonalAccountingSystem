@@ -18,8 +18,11 @@
       </div>
       
       <div class="add-box">
-        <input v-model="newItem.title" placeholder="項目（如：草莓聖代）" style="flex: 2;"/>
-        <input v-model.number="newItem.amount" type="number" placeholder="金額" style="flex: 1;"/>
+        <input v-model="newItem.title" placeholder="項目（如：草莓聖代）" style="flex: 2; min-width: 0;"/>
+        <input v-model="newItem.note" placeholder="備註（如：小八貓請客）" style="flex: 1.5; min-width: 0;"/>
+        <input v-model.number="newItem.amount" type="number" placeholder="金額" style="flex: 1; min-width: 0;"/>
+        
+        <input v-model="newItem.date" type="date" class="date-input" style="flex: 1.5; min-width: 0;" />
         
         <select v-model="newItem.category" class="cat-select">
           <option value="食">🍔 食</option>
@@ -32,14 +35,41 @@
         <button @click="addItem">新增</button>
       </div>
 
+      <div class="filter-box">
+        <div class="filter-group">
+          <label class="filter-label">按分類篩選：</label>
+          <select v-model="filterCategory" class="filter-select">
+            <option value="全部">🌈 全部顯示</option>
+            <option value="食">🍔 食</option>
+            <option value="衣">🛍️ 衣</option>
+            <option value="住">🏠 住</option>
+            <option value="行">🚃 行</option>
+            <option value="其他">❓ 其他</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">關鍵字搜尋：</label>
+          <input v-model="searchKeyword" placeholder="搜尋項目或備註..." class="filter-input" />
+        </div>
+      </div>
+
       <hr />
 
       <div v-if="loading" class="loading-text">讀取中...</div>
       <ul v-else>
-        <li v-for="item in items" :key="item.id">
+        <li v-for="item in filteredItems" :key="item.id">
           <div class="item-left">
-            <span class="cat-tag">{{ item.category }}</span>
-            <span class="item-title">{{ item.title }}</span>
+            <span class="cat-tag">
+              {{ item.category === '食' ? '🍔' : item.category === '衣' ? '🛍️' : item.category === '住' ? '🏠' : item.category === '行' ? '🚃' : '❓' }} {{ item.category }}
+            </span>
+            <div class="item-info">
+              <span class="item-title">
+                {{ item.title }}
+                <span v-if="item.note" style="font-size: 12px; color: #bcaaa4; font-weight: normal; margin-left: 6px;">({{ item.note }})</span>
+              </span>
+              <span class="item-date">{{ item.date ? item.date.split('T')[0] : '' }}</span>
+            </div>
           </div>
           <div>
             <span class="price">${{ item.amount }}</span>
@@ -58,21 +88,29 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import axios from 'axios'
-import { useRouter } from 'vue-router' // 1. 引入 Router
-import Swal from 'sweetalert2'        // 2. 引入 SweetAlert2 (如果你想讓登出變漂亮)
+import { useRouter } from 'vue-router'
+import Swal from 'sweetalert2'
 
 const items = ref([])
 const loading = ref(true)
-const newItem = ref({ title: '', amount: 0, category: '食' }) // 預設食
-const router = useRouter() // 3. 初始化 Router
-const currentUserName = ref('') // 4. 用來存當前使用者名稱
-// 記得這裡數字要改成你 Visual Studio 啟動後的 Port 號碼喔！
+
+// 🔍 補上：用來記錄篩選條件的響應式變數
+const filterCategory = ref('全部')
+const searchKeyword = ref('')
+
+// 📅 getTodayDate 預設帶入今天的日期 (格式：YYYY-MM-DD)
+const getTodayDate = () => new Date().toISOString().split('T')[0]
+
+// 📝 初始值完整包含 title, note, amount, category, date
+const newItem = ref({ title: '', note: '', amount: 0, category: '食', date: getTodayDate() })
+
+const router = useRouter()
+const currentUserName = ref(localStorage.getItem('userName') || '') 
+
 const API_URL = 'https://localhost:7283/api/transactions'
 
-// 5. 新增登出函式
 const handleLogout = () => {
-  localStorage.removeItem('isLogin')
-  localStorage.removeItem('userName')
+  localStorage.clear() 
   
   Swal.fire({
     title: '已成功登出！',
@@ -85,12 +123,28 @@ const handleLogout = () => {
   router.push('/login')
 }
 
-//1. 自動計算總金額
-const totalAmount = computed(() => {
-  return items.value.reduce((sum, item) => sum + item.amount, 0)
+// 🌟 補上：計算篩選後的歷史紀錄邏輯
+const filteredItems = computed(() => {
+  return items.value.filter(item => {
+    // 1. 檢查分類
+    const matchCategory = filterCategory.value === '全部' || item.category === filterCategory.value
+    
+    // 2. 檢查關鍵字（同時搜尋項目 title 和備註 note，不分大小寫）
+    const keyword = searchKeyword.value.trim().toLowerCase()
+    const matchKeyword = !keyword || 
+                         item.title.toLowerCase().includes(keyword) || 
+                         (item.note && item.note.toLowerCase().includes(keyword))
+    
+    return matchCategory && matchKeyword
+  })
 })
 
-// 2. 根據金額決定吉伊卡哇的表情
+// 自動計算總金額（改為連動篩選後的結果）
+const totalAmount = computed(() => {
+  return filteredItems.value.reduce((sum, item) => sum + item.amount, 0)
+})
+
+// 根據金額決定吉伊卡哇的表情
 const statusMessage = computed(() => {
   if (totalAmount.value === 0) return "帳本空空的... ( ・ω・)"
   if (totalAmount.value > 2000) return "哇哇...花太多了啦 ( ᐡ ɞ̴̶̷ ❌ ɞ̴̶̷ ᐡ )"
@@ -100,7 +154,6 @@ const statusMessage = computed(() => {
 const fetchItems = async () => {
   try {
     const res = await axios.get(API_URL)
-    // 讓最新的資料排在最上面
     items.value = res.data.reverse()
   } catch (err) {
     console.error("抓取失敗，請確認後端有開：", err)
@@ -112,21 +165,25 @@ const fetchItems = async () => {
 const addItem = async () => {
   if (!newItem.value.title || newItem.value.amount <= 0) return
   try {
+    // 🌟 核心：一次把完整的欄位傳遞給後端 API
     await axios.post(API_URL, {
       title: newItem.value.title,
+      note: newItem.value.note,                         // 📝 備註
       amount: newItem.value.amount,
-      date: new Date().toISOString(),
+      category: newItem.value.category,                 // 分類
+      date: new Date(newItem.value.date).toISOString(), // 自訂日期
       type: "Expense"
     })
-    newItem.value = { title: '', amount: 0, category: '食' }
+    
+    // 重設輸入框狀態
+    newItem.value = { title: '', note: '', amount: 0, category: '食', date: getTodayDate() }
     fetchItems()
   } catch (err) {
-    alert("新增失敗，請檢查後端 API")
+    Swal.fire('錯誤', '新增失敗，請檢查後端 API', 'error')
   }
 }
 
 const deleteItem = async (id) => {
-  // 換成 SweetAlert2 的確認視窗
   const result = await Swal.fire({
     title: '確定要刪除嗎？',
     text: "刪掉就找不回補囉！(๑•́ ₃ •̀๑)",
@@ -153,7 +210,6 @@ onMounted(fetchItems)
 </script>
 
 <style>
-/* 1. 整個網頁的背景 - 淡淡的蜜桃粉色 */
 body {
   background-color: #fff0f3; 
   margin: 0;
@@ -168,15 +224,14 @@ body {
   padding: 50px 0;
 }
 
-/* 2. 記帳框 - 像雲朵一樣浮起來 */
 .container {
-  max-width: 450px;
+  max-width: 600px; 
   width: 90%;
   margin: 0 auto;
   padding: 30px;
-  background: rgba(255, 255, 255, 0.9); /* 半透明白 */
-  border-radius: 30px; /* 超圓角 */
-  box-shadow: 0 15px 30px rgba(255, 182, 193, 0.2); /* 粉色柔和陰影 */
+  background: rgba(255, 255, 255, 0.9); 
+  border-radius: 30px; 
+  box-shadow: 0 15px 30px rgba(255, 182, 193, 0.2); 
 }
 
 .header {
@@ -198,8 +253,49 @@ h1 {
 
 .add-box {
   display: flex;
-  gap: 10px;
-  margin-bottom: 30px;
+  gap: 8px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+/* 🔍 新增的篩選區樣式 */
+.filter-box {
+  margin-bottom: 25px; 
+  display: flex; 
+  gap: 12px; 
+  background: #fff8f9; 
+  padding: 12px 18px; 
+  border-radius: 16px; 
+  border: 2px dashed #ffccd5;
+}
+
+.filter-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-label {
+  font-size: 12px; 
+  color: #a1887f; 
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.filter-select, .filter-input {
+  width: 100%; 
+  padding: 10px; 
+  border-radius: 10px; 
+  border: 2px solid #ffecf0;
+  outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
+  background-color: white;
+}
+
+.filter-select:focus, .filter-input:focus {
+  border-color: #ffdb4d;
+  background-color: #fffdf5;
 }
 
 input {
@@ -208,18 +304,22 @@ input {
   border-radius: 12px;
   outline: none;
   transition: all 0.3s;
-  flex: 1;
 }
 
-/* 輸入框焦點 - Chiikawa 黃色 */
 input:focus {
   border-color: #ffd900;
   background-color: #fffdf5;
 }
 
-/* 按鈕 - 吉伊卡哇黃色配色 */
+.date-input {
+  cursor: pointer;
+  padding: 11px 8px;
+  color: #5d4037;
+  font-family: sans-serif;
+}
+
 button {
-  padding: 10px 20px;
+  padding: 11px 16px;
   background: #ffdb4d;
   color: #5d4037;
   font-weight: bold;
@@ -227,6 +327,7 @@ button {
   border-radius: 12px;
   cursor: pointer;
   transition: transform 0.2s, background 0.3s;
+  white-space: nowrap;
 }
 
 button:hover {
@@ -246,12 +347,12 @@ button:hover {
 
 .delete-btn:hover {
   background: none;
-  transform: scale(1.3); /* 碰到的時候稍微變大 */
+  transform: scale(1.3);
 }
 
 hr {
   border: none;
-  border-top: 2px dashed #ffecf0; /* 點點分割線 */
+  border-top: 2px dashed #ffecf0; 
   margin: 25px 0;
 }
 
@@ -265,17 +366,16 @@ ul {
   padding: 0;
 }
 
-/* 每一項列表 - 小八貓藍色側邊 */
 li {
   background: white;
   margin-bottom: 12px;
-  padding: 18px;
+  padding: 15px 18px;
   border-radius: 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   list-style: none;
-  border-left: 6px solid #a1d0f8; /* Hachiware 藍 */
+  border-left: 6px solid #a1d0f8; 
   transition: transform 0.2s;
   box-shadow: 0 5px 10px rgba(0,0,0,0.02);
 }
@@ -285,9 +385,20 @@ li:hover {
   background: #fdfdfd;
 }
 
+.item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .item-title {
   color: #5d5d5d;
   font-weight: 500;
+}
+
+.item-date {
+  font-size: 11px;
+  color: #bcaaa4;
 }
 
 .price {
@@ -296,7 +407,6 @@ li:hover {
   color: #ef6c00;
 }
 
-/* 下方裝飾區 */
 .footer-decoration {
   text-align: center;
   margin-top: 30px;
@@ -312,24 +422,24 @@ li:hover {
   border: 2px solid #ffecf0;
 }
 
-/* 分類標籤樣式 */
 .cat-tag {
-  background: #e1f5fe;
-  color: #0288d1;
-  padding: 2px 8px;
+  background: #fff3cd; 
+  color: #856404;
+  padding: 4px 8px;
   border-radius: 8px;
-  font-size: 11px;
-  margin-right: 8px;
-  vertical-align: middle;
+  font-size: 12px;
+  margin-right: 12px;
+  white-space: nowrap;
 }
 
-/* 分類下拉選單樣式 */
 .cat-select {
   border: 2px solid #ffecf0;
   border-radius: 12px;
-  padding: 5px;
+  padding: 11px 6px;
   outline: none;
   cursor: pointer;
+  color: #5d4037;
+  background-color: white;
 }
 
 .item-left {
@@ -341,6 +451,6 @@ li:hover {
   font-weight: bold;
   color: #a1887f;
   margin-top: 5px;
-  min-height: 1.2em; /* 防止文字跳動 */
+  min-height: 1.2em; 
 }
 </style>

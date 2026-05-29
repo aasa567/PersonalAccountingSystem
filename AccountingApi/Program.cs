@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using AccountingApi.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
 
 namespace AccountingApi
 {
@@ -28,6 +31,32 @@ namespace AccountingApi
                                     .AllowAnyHeader()
                                     .AllowAnyMethod());
             });
+
+            // ================= ?註冊 JWT 驗證服務 =================
+            var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+            var secretKey = jwtSettings["SecretKey"];
+
+            builder.Services.AddAuthentication(options =>
+            {
+                // 設定系統預設的認證方案為 JWT Bearer
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,          // 驗證發行者
+                    ValidateAudience = true,        // 驗證接收者
+                    ValidateLifetime = true,        // 驗證 Token 是否過期
+                    ValidateIssuerSigningKey = true,// 驗證金鑰是否正確
+
+                    ValidIssuer = jwtSettings["Issuer"],
+                    ValidAudience = jwtSettings["Audience"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+                };
+            });
+            // ===================================================================
 
             var app = builder.Build();
 

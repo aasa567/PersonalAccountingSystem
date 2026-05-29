@@ -57,16 +57,27 @@ const handleLogin = async () => {
     })
 
     if (response.status === 200) {
+      // 🌟 【重點修改】從後端回傳的資料中解構出 token, username, role
+      const { token, username, role } = response.data
+
+      // 🌟 將資訊存入瀏覽器的 localStorage
       localStorage.setItem('isLogin', 'true')
-      localStorage.setItem('userName', response.data.username)
+      localStorage.setItem('userToken', token)       // 儲存 JWT 通行證
+      localStorage.setItem('userRole', role)         // 儲存角色權限 (Admin / User)
+      localStorage.setItem('userName', username)     // 儲存使用者名稱
 
       // 2. 使用漂亮的 Toast 顯示成功
       await Toast.fire({
         icon: 'success',
-        title: `哈哇！歡迎回來 ${response.data.username}！`
+        title: `哈哇！歡迎回來 ${username}！`
       })
 
-      router.push('/')
+      // 🌟 【重點修改】根據角色決定要把使用者送去哪裡
+      if (role === 'Admin') {
+        router.push('/Admin') // 管理員直接導向後台
+      } else {
+        router.push('/')      // 一般用戶導向首頁
+      }
     }
   } catch (error) {
     // 3. 登入失敗的彈窗
